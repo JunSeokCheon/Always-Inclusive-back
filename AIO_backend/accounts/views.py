@@ -1,4 +1,5 @@
 from rest_framework import generics, status
+from rest_framework.views import APIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -29,6 +30,47 @@ class SignupView(generics.CreateAPIView):
                 "token": token.key
             },
             status=status.HTTP_201_CREATED
+        )
+        
+class LoginAPIView(APIView):
+    permission_classes = [AllowAny]  # 로그인은 인증 없이 접근 가능
+
+    def post(self, request, *args, **kwargs):
+        email = request.data.get('email')
+        password = request.data.get('password')
+
+        if not email or not password:
+            return Response(
+                {"success": False, "message": "이메일과 비밀번호를 모두 입력해주세요."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            return Response(
+                {"success": False, "message": "해당 계정이 존재하지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 비밀번호 확인
+        if not user.check_password(password):
+            return Response(
+                {"success": False, "message": "비밀번호가 일치하지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 여기까지 통과하면 로그인 성공
+        # (옵션) TokenAuthentication을 쓴다면 토큰 발급/조회
+        token, created = Token.objects.get_or_create(user=user)
+
+        return Response(
+            {
+                "success": True,
+                "message": "로그인 성공",
+                "token": token.key
+            },
+            status=status.HTTP_200_OK
         )
 
 class LogoutView(generics.GenericAPIView):
