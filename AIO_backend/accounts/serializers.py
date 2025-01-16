@@ -22,12 +22,16 @@ class UserSignupSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         # password2는 실제 DB 저장할 필드가 아님
         validated_data.pop('password2', None)
+        username = validated_data.get('username')
+        if not username:  # username이 없다면?
+            validated_data['username'] = validated_data['email']  # email로 대체
 
         # User 인스턴스 생성
         user = User(
             email=validated_data['email'],
             gender=validated_data.get('gender', ''),
-            age_group=validated_data.get('age_group', '')
+            age_group=validated_data.get('age_group', ''),
+            username=validated_data.get('username', ''),
         )
         # Django의 set_password()로 비밀번호 해시
         user.set_password(validated_data['password'])
