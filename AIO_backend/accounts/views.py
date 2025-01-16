@@ -77,10 +77,13 @@ class LogoutView(generics.GenericAPIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, *args, **kwargs):
-        # Token 삭제
+        # 1) 인증된 사용자(토큰으로 인증)의 Token을 삭제
         Token.objects.filter(user=request.user).delete()
-        # Django session logout (세션 사용 시)
+        
+        # 2) (선택) Django 세션 로그아웃(세션 기반도 함께 쓰는 경우)
         logout(request)
+        
+        # 3) 응답
         return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
 
 class ProfileView(generics.RetrieveAPIView):
