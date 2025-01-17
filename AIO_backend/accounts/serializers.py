@@ -37,6 +37,9 @@ class UserSignupSerializer(serializers.ModelSerializer):
         user.set_password(validated_data['password'])
         user.save()
         return user
+    
+class DeleteAccountSerializer(serializers.Serializer):
+    password = serializers.CharField(write_only=True)
 
 
 class UserProfileSerializer(serializers.ModelSerializer):

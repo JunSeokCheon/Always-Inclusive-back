@@ -6,7 +6,11 @@ from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model, logout
 from rest_framework.authtoken.models import Token
 
-from .serializers import UserSignupSerializer, UserProfileSerializer
+from .serializers import (
+    UserSignupSerializer, 
+    UserProfileSerializer,
+    DeleteAccountSerializer
+)
 
 User = get_user_model()
 
@@ -86,6 +90,7 @@ class LogoutView(generics.GenericAPIView):
         # 3) 응답
         return Response({"detail": "Successfully logged out."}, status=status.HTTP_200_OK)
 
+
 class ProfileView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = UserProfileSerializer
@@ -108,13 +113,28 @@ class ProfileUpdateView(generics.UpdateAPIView):
         self.perform_update(serializer)
         return Response(serializer.data)
 
-class DeleteUserView(generics.DestroyAPIView):
+class DeleteUserView(APIView):
+    """
+    POST /api/accounts/delete/
+    Body: { "password": "..." }
+
+    - 토큰 인증 (IsAuthenticated)
+    - 비밀번호 확인
+    - 맞으면 user.delete()
+    """
     permission_classes = [IsAuthenticated]
 
-    def get_object(self):
-        return self.request.user
+    def post(self, request):
+        serializer = DeleteAccountSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        password = serializer.validated_data['password']
 
-    def destroy(self, request, *args, **kwargs):
-        user = self.get_object()
+        user = request.user
+        if not user.check_password(password):
+            return Response(
+                {"message": "비밀번호가 일치하지 않습니다."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         user.delete()
-        return Response({"detail": "User has been deleted."}, status=status.HTTP_200_OK)
+        return Response({"message": "회원 탈퇴가 완료되었습니다."}, status=status.HTTP_200_OK)
