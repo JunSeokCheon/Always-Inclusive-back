@@ -109,6 +109,16 @@ DATABASES = {
         'PORT': '3306',                        # DB 포트 (기본 3306)
     }
 }
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
+#         'NAME': 'ott_project',                   # DB 이름
+#         'USER': 'root',                     # DB 사용자
+#         'PASSWORD': '1234',             # DB 비밀번호
+#         'HOST': '',                   # DB 서버 주소
+#         'PORT': '3305',                        # DB 포트 (기본 3306)
+#     }
+# }
 
 
 # Password validation
