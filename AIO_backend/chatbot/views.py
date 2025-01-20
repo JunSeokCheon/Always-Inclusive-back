@@ -59,10 +59,10 @@ class ChatbotView(APIView):
             api_key = os.getenv("OPENAI_API_KEY")
         )
 
-        model = ChatOpenAI(model="gpt-4o-mini")
+        model = ChatOpenAI(model="gpt-4o")
 
         # csv 파일 로드.
-        loader = CSVLoader('C:/Users/Maitreya/Desktop/Always-Inclusive-back/AIO_backend/chatbot/Merged_details.csv',encoding='UTF8')
+        loader = CSVLoader('./chatbot/Merged_details.csv',encoding='UTF8')
 
         videos = loader.load()
 
@@ -159,7 +159,7 @@ class ChatbotView(APIView):
             "context": response_docs,
             "question": query
         })
-        
+
         # 3. LLM으로 응답 생성
         response = rag_chain_debug["llm"].invoke(prompt_messages)
         print(response.content)

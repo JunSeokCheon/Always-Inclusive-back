@@ -110,6 +110,17 @@ DATABASES = {
     }
 }
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
+#         'NAME': 'ott_project',                   # DB 이름
+#         'USER': 'root',                     # DB 사용자
+#         'PASSWORD': '3178',             # DB 비밀번호
+#         'HOST': '127.0.0.1',                   # DB 서버 주소
+#         'PORT': '3306',                        # DB 포트 (기본 3306)
+#     }
+# }
+
 
 # Password validation
 # https://docs.djangoproject.com/en/4.2/ref/settings/#auth-password-validators
