@@ -99,6 +99,7 @@ WSGI_APPLICATION = 'AIO_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# 수호님
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
@@ -109,6 +110,8 @@ DATABASES = {
         'PORT': '3306',                        # DB 포트 (기본 3306)
     }
 }
+
+# 승환님 환경
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
@@ -120,6 +123,7 @@ DATABASES = {
 #     }
 # }
 
+# 준석
 # DATABASES = {
 #     'default': {
 #         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
