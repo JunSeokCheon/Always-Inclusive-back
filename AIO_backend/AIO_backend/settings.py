@@ -28,7 +28,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     '34.227.17.183',   # EC2 퍼블릭 IP
     '127.0.0.1',      
-    'localhost'
+    'localhost',
+    '43.201.26.159'
 ]
 
 
