@@ -18,6 +18,21 @@ from langchain_core.runnables import RunnablePassthrough
 import re
 from openai import OpenAI
 
+
+# def get_system_prompt():
+#     system_prompt = """당신은 vectorstore에 존재하는 데이터를 활용하여 답변하는 AI 도우미입니다.
+
+#                     규칙:
+#                     1. 주어진 vectorstore의 데이터를 토대로 답변해야 합니다.                    
+#                     2. 최대 5개를 추천해줘야합니다.
+#                     3. 사용자의 질문이 애매한 경우, 구체적인 정보 중 genre를 요청하세요. genre예시를 제공하면 좋습니다.
+#                     4. 답변은 vectorstore에서 title을 출력해야 합니다.
+
+#                     접근 가능한 데이터 범위:
+#                     - vectorstore에 포함된 데이터를 주로 사용
+#                     """
+#     return system_prompt
+
 class ChatbotView(APIView):
     permission_classes = [AllowAny] 
     """
@@ -28,6 +43,9 @@ class ChatbotView(APIView):
         "timestamp": <string>
     }
     """
+
+
+    
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         user_message = request.data.get('message')
@@ -64,9 +82,20 @@ class ChatbotView(APIView):
         # csv 파일 로드.
         loader = CSVLoader('C:/Users/Maitreya/Desktop/Always-Inclusive-back/AIO_backend/chatbot/Merged_details.csv',encoding='UTF8')
 
+        
+        
+        #txt 파일 로드
+        # loader = CSVLoader('C:/Users/Maitreya/Desktop/Always-Inclusive-back/AIO_backend/chatbot/Merged_details.txt', encoding='UTF8')
+        
         videos = loader.load()
 
-
+        # recursive_text_splitter = RecursiveCharacterTextSplitter(
+        #     chunk_size=10,
+        #     chunk_overlap=5,
+        #     length_function=len,
+        #     is_separator_regex=False,
+        # )
+        
         recursive_text_splitter = RecursiveCharacterTextSplitter(
             chunk_size=10,
             chunk_overlap=5,
@@ -79,16 +108,15 @@ class ChatbotView(APIView):
 
         embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
 
-        # if os.path.exists('./db/faiss'):
-        #     vectorstore = FAISS.load_local('./db/faiss', embeddings, allow_dangerous_deserialization=True)
-        # else:
-        #     vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
-        #     vectorstore.save_local('./db/faiss')
+        if os.path.exists('./db/faiss'):
+            vectorstore = FAISS.load_local('./db/faiss', embeddings, allow_dangerous_deserialization=True)
+        else:
+            vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
+            vectorstore.save_local('./db/faiss')
             
-        vectorstore = FAISS.from_documents(documents=videos, embedding=embeddings)
+        # vectorstore = FAISS.from_documents(documents=videos, embedding=embeddings)
 
         retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 1})
-
 
         # 프롬프트 템플릿 정의
         contextual_prompt = ChatPromptTemplate.from_messages([
@@ -162,5 +190,4 @@ class ChatbotView(APIView):
         
         # 3. LLM으로 응답 생성
         response = rag_chain_debug["llm"].invoke(prompt_messages)
-        print(response.content)
         return response.content
