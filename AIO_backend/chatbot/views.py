@@ -2,192 +2,120 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework import status
-import numpy as np
 import os
 from dotenv import load_dotenv
-import datetime
-from langchain_community.document_loaders.csv_loader import CSVLoader
+from langchain_community.document_loaders import TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage
 from langchain_openai import OpenAIEmbeddings
 from langchain_community.vectorstores import FAISS
-from langchain.vectorstores.base import VectorStore
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
-import re
-from openai import OpenAI
 
+load_dotenv()
 
-# def get_system_prompt():
-#     system_prompt = """당신은 vectorstore에 존재하는 데이터를 활용하여 답변하는 AI 도우미입니다.
+class SimplePassThrough:
+    def invoke(self, inputs, **kwargs):
+        return inputs
 
-#                     규칙:
-#                     1. 주어진 vectorstore의 데이터를 토대로 답변해야 합니다.                    
-#                     2. 최대 5개를 추천해줘야합니다.
-#                     3. 사용자의 질문이 애매한 경우, 구체적인 정보 중 genre를 요청하세요. genre예시를 제공하면 좋습니다.
-#                     4. 답변은 vectorstore에서 title을 출력해야 합니다.
+class ContextToPrompt:
+    def __init__(self, prompt_template):
+        self.prompt_template = prompt_template
 
-#                     접근 가능한 데이터 범위:
-#                     - vectorstore에 포함된 데이터를 주로 사용
-#                     """
-#     return system_prompt
+    def invoke(self, inputs):
+        if isinstance(inputs, list):
+            context_text = "\n".join([doc.page_content for doc in inputs])
+        else:
+            context_text = inputs
+
+        formatted_prompt = self.prompt_template.format_messages(
+            context=context_text,
+            question=inputs.get("question", "")
+        )
+        return formatted_prompt
+
+class RetrieverWrapper:
+    def __init__(self, retriever):
+        self.retriever = retriever
+
+    def invoke(self, inputs):
+        if isinstance(inputs, dict):
+            query = inputs.get("question", "")
+        else:
+            query = inputs
+        response_docs = self.retriever.get_relevant_documents(query)
+        return response_docs
 
 class ChatbotView(APIView):
-    permission_classes = [AllowAny] 
-    """
-    POST /api/chatbot/chat/
-    Body: {
-        "email": <string>,
-        "message": <string>,
-        "timestamp": <string>
-    }
-    """
+    permission_classes = [AllowAny]
 
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not openai_api_key:
+            raise ValueError("OPENAI_API_KEY is not set in the environment variables.")
+        
+        self.model = ChatOpenAI(model="gpt-4o")
+        
+        # 각 엔트리를 별도의 문서로 로드
+        loader = TextLoader('./chatbot/Merged_details.txt', encoding='UTF8', autodetect_encoding=False)
+        videos = loader.load()
+        
+        # 텍스트 분할을 최소화하여 각 문서를 개별적으로 유지
+        # 필요 시, 텍스트 분할기를 제거하거나 큰 청크로 설정
+        recursive_text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,  # 큰 청크로 설정
+            chunk_overlap=100,  # 약간의 오버랩
+            length_function=len,
+            is_separator_regex=False,
+        )
+        splits = recursive_text_splitter.split_documents(videos)
+        
+        embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+        
+        if os.path.exists('./db/faiss'):
+            self.vectorstore = FAISS.load_local('./db/faiss', embeddings, allow_dangerous_deserialization=True)
+        else:
+            self.vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
+            self.vectorstore.save_local('./db/faiss')
+        # self.vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
+        
+        self.retriever = self.vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 10})
+        
+        self.contextual_prompt = ChatPromptTemplate.from_messages([
+            ("system", "당신은 제공된 데이터에 기반하여 질문에 답변하는 AI 도우미입니다. 외부 지식이나 정보를 사용하지 말고, 오직 주어진 데이터만을 참고하여 응답하세요. 응답은 한국어로 작성되어야 합니다."),
+            ("user", "데이터 컨텍스트: {context}\n\n질문: {question}\n\n제공된 데이터를 바탕으로 명확하고 구체적인 답변을 제공하세요. 가능한 경우, 요청한 조건에 맞는 후보군을 모두 나열해 주세요.")
+        ])
+        
+        self.rag_chain = {
+            "context": RetrieverWrapper(self.retriever),
+            "prompt": ContextToPrompt(self.contextual_prompt),
+            "llm": self.model
+        }
 
-    
     def post(self, request, *args, **kwargs):
         email = request.data.get('email')
         user_message = request.data.get('message')
         timestamp = request.data.get('timestamp')  # 실제 사용 여부는 선택
 
-        # (선택) email, message 유효성 체크
         if not user_message:
             return Response({"error": "message is required"}, status=status.HTTP_400_BAD_REQUEST)
 
-        # 1) 여기서 AI 서버나 로컬 로직으로 챗봇 응답 생성
-        #    예: bot_response = some_ai_logic(user_message) 
-        bot_response = self._dummy_response(user_message)
+        try:
+            bot_response = self._generate_response(user_message)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-        # 2) (선택) DB에 대화 기록 저장, 사용자 식별 위해 email 활용
-        # ChatHistory.objects.create(email=email, question=user_message, answer=bot_response, ...)
-
-        # 3) 프론트가 원하는 JSON 구조로 응답
         return Response(
             {"responseMessage": bot_response},
             status=status.HTTP_200_OK
         )
 
-    def _dummy_response(self, query):
-
-# openai API키 입력
-        load_dotenv()
-
-        client = OpenAI(
-            api_key = os.getenv("OPENAI_API_KEY")
-        )
-
-        model = ChatOpenAI(model="gpt-4o")
-
-        # csv 파일 로드.
-        loader = CSVLoader('./chatbot/Merged_details.csv',encoding='UTF8')
-
-        
-        
-        #txt 파일 로드
-        # loader = CSVLoader('C:/Users/Maitreya/Desktop/Always-Inclusive-back/AIO_backend/chatbot/Merged_details.txt', encoding='UTF8')
-        
-        videos = loader.load()
-
-        # recursive_text_splitter = RecursiveCharacterTextSplitter(
-        #     chunk_size=10,
-        #     chunk_overlap=5,
-        #     length_function=len,
-        #     is_separator_regex=False,
-        # )
-        
-        recursive_text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=10,
-            chunk_overlap=5,
-            length_function=len,
-            is_separator_regex=False,
-        )
-
-        splits = recursive_text_splitter.split_documents(videos)
-
-
-        embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-
-        if os.path.exists('./db/faiss'):
-            vectorstore = FAISS.load_local('./db/faiss', embeddings, allow_dangerous_deserialization=True)
-        else:
-            vectorstore = FAISS.from_documents(documents=splits, embedding=embeddings)
-            vectorstore.save_local('./db/faiss')
-            
-        # vectorstore = FAISS.from_documents(documents=videos, embedding=embeddings)
-
-        retriever = vectorstore.as_retriever(search_type="similarity", search_kwargs={"k": 1})
-
-        # 프롬프트 템플릿 정의
-        contextual_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Please respond only in Korean. Recommend 5 videos that the user would like to see recommended among dramas, movies, and animations. Search and recommend keywords in the Genre list in Merged_details.csv in priority order."),
-            ("user", "Context: {context}\\n\\nQuestion: {question}. Provide clear and specific recommendations based on the data.")
-
-        ])
-
-
-
-
-        # 디버깅을 위해 만든 클래스
-        class SimplePassThrough:
-            def invoke(self, inputs, **kwargs):
-                return inputs
-
-        # 프롬프트 클래스
-        class ContextToPrompt:
-            def __init__(self, prompt_template):
-                self.prompt_template = prompt_template
-
-            def invoke(self, inputs):
-                # response_docs 내용을 trim (가독성을 높여줌)
-                if isinstance(inputs, list): # inputs가 list인 경우. 즉 여러개의 문서들이 검색되어 리스트로 전달된 경우
-                    context_text = "\n".join([doc.page_content for doc in inputs]) # \n을 구분자로 넣어서 한 문자열로 합치기
-                else:
-                    context_text = inputs # 리스트가 아닌경우는 그냥 리턴
-
-                # 프롬프트
-                formatted_prompt = self.prompt_template.format_messages( # 템플릿의 변수에 삽입
-                    context=context_text, # {context} 변수에 context_text, 즉 검색된 문서 내용을 삽입
-                    question=inputs.get("question", "")
-                )
-                return formatted_prompt
-
-        # Retriever 클래스
-        class RetrieverWrapper:
-            def __init__(self, retriever):
-                self.retriever = retriever
-
-            def invoke(self, inputs):
-                # 0단계 : query의 타입에 따른 전처리
-                if isinstance(inputs, dict): # inputs가 딕셔너리 타입일경우, question 키의 값을 검색 쿼리로 사용
-                    query = inputs.get("question", "")
-                else: # 질문이 문자열로 주어지면, 그대로 검색 쿼리로 사용
-                    query = inputs
-                # 1단계 : query를 리트리버에 넣어주고, response_docs를 얻기
-                response_docs = self.retriever.get_relevant_documents(query) # 검색을 수행하고 검색 결과를 response_docs에 저장
-                return response_docs
-
-        # RAG 체인 설정
-        rag_chain_debug = {
-            "context": RetrieverWrapper(retriever), # 클래스 객체를 생성해서 value로 넣어줌
-            "prompt": ContextToPrompt(contextual_prompt),
-            "llm": model
-        }
-
-        # 챗봇 구동
-        # while True:
-        #     print("========================")
-        #     query = input("질문을 입력하세요 : ")
-            
-            # 1. Retriever로 관련 문서 검색
-        response_docs = rag_chain_debug["context"].invoke({"question": query})
-        
-        # 2. 문서를 프롬프트로 변환
-        prompt_messages = rag_chain_debug["prompt"].invoke({
+    def _generate_response(self, query):
+        response_docs = self.rag_chain["context"].invoke({"question": query})
+        prompt_messages = self.rag_chain["prompt"].invoke({
             "context": response_docs,
             "question": query
         })
-
-        # 3. LLM으로 응답 생성
-        response = rag_chain_debug["llm"].invoke(prompt_messages)
+        response = self.rag_chain["llm"].invoke(prompt_messages)
+        print(response.content)
         return response.content
