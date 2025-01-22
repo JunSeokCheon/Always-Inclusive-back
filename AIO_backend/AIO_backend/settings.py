@@ -25,7 +25,11 @@ SECRET_KEY = 'django-insecure-vs$(3_nfpo2lrl(-f)k0-6d&gb+nw=a0e^n0zs)$hkw*^mf#b)
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [
+    '34.227.17.183',   # EC2 퍼블릭 IP
+    '127.0.0.1',      
+    'localhost'
+]
 
 
 # Application definition
@@ -99,6 +103,7 @@ WSGI_APPLICATION = 'AIO_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+# 수호님
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
@@ -109,6 +114,30 @@ DATABASES = {
         'PORT': '3306',                        # DB 포트 (기본 3306)
     }
 }
+
+# 승환님 환경
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
+#         'NAME': 'ott_project',                   # DB 이름
+#         'USER': 'root',                     # DB 사용자
+#         'PASSWORD': '1234',             # DB 비밀번호
+#         'HOST': '',                   # DB 서버 주소
+#         'PORT': '3305',                        # DB 포트 (기본 3306)
+#     }
+# }
+
+# 준석
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.mysql',  # MariaDB도 mysql 엔진 사용
+#         'NAME': 'ott_project',                   # DB 이름
+#         'USER': 'root',                     # DB 사용자
+#         'PASSWORD': '3178',             # DB 비밀번호
+#         'HOST': '127.0.0.1',                   # DB 서버 주소
+#         'PORT': '3306',                        # DB 포트 (기본 3306)
+#     }
+# }
 
 
 # Password validation
